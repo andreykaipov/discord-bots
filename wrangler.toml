@@ -2,7 +2,6 @@ name = "awwbot"
 main = "./src/server.js"
 compatibility_date = "2023-09-04"
 
-# [secrets]
-# DISCORD_TOKEN
-# DISCORD_PUBLIC_KEY
-# DISCORD_APPLICATION_ID
+
+[triggers]
+crons = [ "*/2 * * * *" ]
