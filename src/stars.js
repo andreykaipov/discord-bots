@@ -69,11 +69,13 @@ export const getStars = async () => {
         [nextWave, '', '', '', '', ''],
         ['Est. Dead', 'Tier', 'World', 'Location', 'Called', 'Called By'],
     ]
-    const data = stars.map((star) => {
-        delete star.min
-        delete star.max
-        return Object.values(star)
-    })
+    const data = stars
+        .map((star) => {
+            delete star.min
+            delete star.max
+            return Object.values(star)
+        })
+        .slice(0, 40 - 3) // we chunk by 20, and there's 3 lines of headers
     return table([...headers, ...data], {
         border: getBorderCharacters('norc'),
         columns: [
@@ -99,11 +101,10 @@ export const getStars = async () => {
 }
 
 // 1. deletes all messages in a channel
-// 2. prints stars in chunks of 20 lines
+// 2. prints stars in chunks of n lines
 export const updateChannels = async (env, channels) => {
     const stars = await getStars()
-    const starlines = stars.match(/(?=[\s\S])(?:.*\n?){1,20}/g) // split every 20th new line
-    console.log(starlines)
+    const chunks = stars.match(/(?=[\s\S])(?:.*\n?){1,20}/g)
     for await (const channel of channels) {
         const response = await discord(env)(
             'GET',
@@ -119,7 +120,7 @@ export const updateChannels = async (env, channels) => {
             await sleep(500)
         }
 
-        for (const chunk of starlines) {
+        for (const chunk of chunks) {
             const body = { content: `\`\`\`${chunk}\`\`\`` }
             await discord(env)('POST', `channels/${channel}/messages`, body)
         }

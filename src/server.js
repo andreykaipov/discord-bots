@@ -15,7 +15,7 @@ const router = Router()
             request.content,
         )
     })
-    .all('/test', () => getStars())
+    //.all('/test', (_, env) => updateChannels(env, env.channels))
     .all('*', () => new Response('Not Found.', { status: 404 }))
 
 const server = {
