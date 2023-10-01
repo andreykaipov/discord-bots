@@ -1,8 +1,12 @@
 import { verifyKey } from 'discord-interactions'
+import { withParams } from 'itty-router'
+import { discord } from './helpers.js'
 
-export { withParams } from 'itty-router'
+const withDiscordHelper = (request, env) => {
+    request.discord = discord(env)
+}
 
-export const withContent = async (request) => {
+const withContent = async (request) => {
     const parseBody = async () => {
         const contentType = request.headers.get('content-type')
         if (contentType?.includes('application/json')) {
@@ -27,23 +31,7 @@ export const withContent = async (request) => {
     request.content = await parseBody()
 }
 
-export const withDiscordHelper = (request, env) => {
-    request.discord = async (method, path, body = {}) => {
-        const url = `https://discord.com/api/${path}`
-        const response = await fetch(url, {
-            method: method,
-            body: body,
-            headers: {
-                Authorization: `Bot ${env.DISCORD_TOKEN}`,
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-            },
-        })
-        return response
-    }
-}
-
-export const withVerifyDiscordRequest = (request, env) => {
+const withVerifyDiscordRequest = (request, env) => {
     request.verifyDiscordRequest = async () => {
         const signature = request.headers.get('x-signature-ed25519')
         const timestamp = request.headers.get('x-signature-timestamp')
@@ -59,3 +47,10 @@ export const withVerifyDiscordRequest = (request, env) => {
         return { interaction: JSON.parse(body), isValid: true }
     }
 }
+
+export const middleware = [
+    withParams,
+    withContent,
+    withDiscordHelper,
+    withVerifyDiscordRequest,
+]

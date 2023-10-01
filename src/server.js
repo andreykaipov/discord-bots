@@ -2,24 +2,21 @@
  * The core server that runs on a Cloudflare worker.
  */
 
-import { error, json, Router } from 'itty-router'
+import { json, error, Router } from 'itty-router'
 import * as commands from './commands.js'
-import * as middleware from './middleware.js'
-import { table, getBorderCharacters } from 'table'
-import * as timeago from 'timeago.js'
+import { middleware } from './middleware.js'
+import { getStars } from './stars.js'
 import {
     InteractionResponseType,
     InteractionType,
     InteractionResponseFlags,
 } from 'discord-interactions'
-
-import { en_short as locale_en_short } from 'timeago.js/lib/lang/index.js'
-timeago.register('en_short', locale_en_short)
+import { sleep, discord } from './helpers.js'
 
 const router = Router()
-    .all('*', ...Object.values(middleware))
+    .all('*', ...middleware)
     .get('/', (request, env) => {
-        return new Response(`👋 ${env.DISCORD_APPLICATION_ID}`)
+        return { hello: `👋 ${env.DISCORD_APPLICATION_ID}` }
     })
 
 router.post('/message/:channel_id', async (request) => {
@@ -53,50 +50,6 @@ router.post('/', async (request, env) => {
     if (interaction.type === InteractionType.APPLICATION_COMMAND) {
         // Most user commands will come as `APPLICATION_COMMAND`.
         switch (interaction.data.name.toLowerCase()) {
-            case commands.STARS_COMMAND.name.toLowerCase(): {
-                const response = await fetch('https://map.starminers.site/data')
-                const stars = (await response.json()).map((star) => ({
-                    called: star.calledAt,
-                    tier: star.tier,
-                    world: star.world,
-                    location: star.calledLocation,
-                    calledBy: star.calledBy,
-                }))
-                stars.sort((a, b) => b.called - a.called)
-                const formatted = stars.map((star) => {
-                    star.called = timeago.format(star.called * 1000, 'en_short')
-                    return star
-                })
-                const text = table(
-                    [
-                        Object.keys(stars[0]),
-                        ...formatted.map(Object.values).slice(0, 20),
-                    ],
-                    {
-                        border: getBorderCharacters('void'),
-                        columnDefault: {
-                            paddingLeft: 0,
-                            paddingRight: 1,
-                        },
-                        drawHorizontalLine: (lineIndex, rowCount) => {
-                            return lineIndex === 0 || lineIndex === rowCount
-                        },
-                        drawVerticalLine: (lineIndex, columnCount) => {
-                            return lineIndex === 0 || lineIndex === columnCount
-                        },
-                    },
-                )
-                return {
-                    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                    data: {
-                        content: `
-\`\`\`
-${text}
-\`\`\`
-            `,
-                    },
-                }
-            }
             case commands.INVITE_COMMAND.name.toLowerCase(): {
                 const applicationId = env.DISCORD_APPLICATION_ID
                 const INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${applicationId}&scope=applications.commands`
@@ -121,10 +74,36 @@ router.all('*', () => new Response('Not Found.', { status: 404 }))
 
 const server = {
     fetch: (request, env, ctx) =>
-        router
-            .handle(request, env, ctx)
-            .then(json) // send as JSON
-            .catch(error), // catch errors
+        router.handle(request, env, ctx).then(json).catch(error),
+    scheduled: async (event, env) => {
+        console.log('start of scheduled')
+        const channels = ['1136705165555159060']
+        const stars = await getStars()
+        const starlines = stars.match(/(?=[\s\S])(?:.*\n?){1,20}/g) // split every 20th new line
+        console.log(starlines)
+        for await (const channel of channels) {
+            const response = await discord(env)(
+                'GET',
+                `channels/${channel}/messages?limit=100`,
+            )
+            const messages = await response.json()
+            console.log(messages.length)
+            for await (const message of messages) {
+                const response = await discord(env)(
+                    'DELETE',
+                    `channels/${channel}/messages/${message.id}`,
+                )
+                console.log(response.status)
+                await sleep(500)
+            }
+
+            for (const chunk of starlines) {
+                const body = { content: `\`\`\`${chunk}\`\`\`` }
+                await discord(env)('POST', `channels/${channel}/messages`, body)
+            }
+        }
+        console.log('end of scheduled')
+    },
 }
 
 export default server
