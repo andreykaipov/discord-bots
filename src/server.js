@@ -77,7 +77,7 @@ const server = {
         router.handle(request, env, ctx).then(json).catch(error),
     scheduled: async (event, env) => {
         console.log('start of scheduled')
-        const channels = ['1136705165555159060']
+        const channels = ['1136705165555159060', '1157344633932763196']
         const stars = await getStars()
         const starlines = stars.match(/(?=[\s\S])(?:.*\n?){1,20}/g) // split every 20th new line
         console.log(starlines)
@@ -87,7 +87,6 @@ const server = {
                 `channels/${channel}/messages?limit=100`,
             )
             const messages = await response.json()
-            console.log(messages.length)
             for await (const message of messages) {
                 const response = await discord(env)(
                     'DELETE',
