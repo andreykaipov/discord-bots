@@ -1,7 +1,6 @@
-name = "awwbot"
+name = "kaal-ket-jor"
 main = "./src/server.js"
 compatibility_date = "2023-09-04"
-
 
 [triggers]
 crons = [ "*/2 * * * *" ]
