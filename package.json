@@ -15,8 +15,7 @@
   "dependencies": {
     "discord-interactions": "^3.4.0",
     "itty-router": "^4.0.13",
-    "table": "^6.8.1",
-    "timeago.js": "^4.0.2"
+    "table": "^6.8.1"
   },
   "devDependencies": {
     "c8": "^8.0.0",

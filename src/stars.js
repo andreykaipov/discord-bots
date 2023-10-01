@@ -1,9 +1,5 @@
 import { sleep, discord } from './helpers.js'
 import { table, getBorderCharacters } from 'table'
-import * as timeago from 'timeago.js'
-import { en_short as locale_en_short } from 'timeago.js/lib/lang/index.js'
-
-timeago.register('en_short', locale_en_short)
 
 const api = 'https://map.starminers.site/data'
 
@@ -59,8 +55,13 @@ export const getStars = async () => {
         .filter((star) => star.deadtime > now)
         .sort((a, b) => b.deadtime - a.deadtime || b.tier - a.tier)
         .map((star) => {
-            star.called = timeago.format(star.called * 1000, 'en_short')
-            star.deadtime = timeago.format(star.deadtime * 1000, 'en_short')
+            const called = (now - star.called) / 60
+            if (called < 1) star.called = 'just now'
+            else star.called = `${Math.floor(called)}m ago`
+
+            const deadtime = (star.deadtime - now) / 60
+            if (deadtime < 1) star.deadtime = 'not worth'
+            else star.deadtime = `in ${Math.floor(deadtime)}m`
             return star
         })
     const nextWave = calculateNextWave(stars)
