@@ -2,5 +2,11 @@ name = "kaal-ket-jor"
 main = "./src/server.js"
 compatibility_date = "2023-09-04"
 
+[vars]
+channels = [
+  "1136705165555159060",
+  "1157344633932763196",
+]
+
 [triggers]
 crons = [ "*/2 * * * *" ]
