@@ -1,0 +1,18 @@
+#!/bin/bash
+set -eu
+
+packages=$(find ./ -maxdepth 2 -name package.json -printf '%P\n' | xargs -n1 dirname)
+
+files=(
+        .eslintrc.json
+        .prettierignore
+        .prettierrc.js
+)
+
+for p in $packages; do
+        for f in "${files[@]}"; do
+                set -x
+                ln -sf "../$f" "$p"
+                set +x
+        done
+done
