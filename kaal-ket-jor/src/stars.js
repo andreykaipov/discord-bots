@@ -1,4 +1,4 @@
-import { sleep, discord } from './helpers.js'
+import { sleep, discord } from 'lib'
 import { table, getBorderCharacters } from 'table'
 
 const api = 'https://map.starminers.site/data'

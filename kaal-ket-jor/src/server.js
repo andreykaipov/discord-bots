@@ -1,5 +1,5 @@
 import { json, error, Router } from 'itty-router'
-import { middleware } from './middleware.js'
+import { middleware } from 'lib/middleware.js'
 import { getStars, updateChannels } from './stars.js'
 
 const router = Router()
