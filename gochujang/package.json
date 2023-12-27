@@ -1,0 +1,34 @@
+{
+  "name": "gochujang",
+  "version": "1.0.0",
+  "description": "Discord bot for Allan's server",
+  "private": true,
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "wrangler dev src/server.js",
+    "register": "node src/register.js",
+    "test": "c8 mocha test",
+    "publish": "wrangler deploy"
+  },
+  "dependencies": {
+    "itty-router": "^4.0.13"
+  },
+  "devDependencies": {
+    "c8": "^8.0.0",
+    "chai": "^4.3.7",
+    "dotenv": "^16.0.3",
+    "eslint": "^8.41.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "mocha": "^10.2.0",
+    "ngrok": "^5.0.0-beta.2",
+    "prettier": "^3.0.1",
+    "sinon": "^16.0.0",
+    "wrangler": "^3.0.1"
+  },
+  "workspaces": [
+    "../lib"
+  ]
+}

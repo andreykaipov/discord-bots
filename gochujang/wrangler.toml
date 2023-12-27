@@ -1,0 +1,11 @@
+name = "gochujang"
+main = "./src/server.js"
+compatibility_date = "2023-09-04"
+
+[vars]
+channels = [
+  "1189630829429801102",
+]
+
+[triggers]
+crons = [ "*/5 * * * *" ]
