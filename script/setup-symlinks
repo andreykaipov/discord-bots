@@ -6,7 +6,7 @@ packages=$(find ./ -maxdepth 2 -name package.json -printf '%P\n' | xargs -n1 dir
 files=(
         .eslintrc.json
         .prettierignore
-        .prettierrc.js
+        .prettierrc.mjs
 )
 
 for p in $packages; do
