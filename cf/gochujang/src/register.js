@@ -6,7 +6,7 @@ register.commands([
         description: 'ping pong',
     },
     {
-        name: 'test',
-        description: 'test',
+        name: 'thanks',
+        description: 'Thank you so much for getting back to me...',
     },
 ])
