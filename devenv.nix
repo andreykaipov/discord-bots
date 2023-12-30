@@ -7,6 +7,7 @@
 
   packages = with pkgs; [
     _1password
+    azure-cli
     jq
     entr
     git
