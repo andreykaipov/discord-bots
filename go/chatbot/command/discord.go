@@ -33,11 +33,15 @@ type Discord struct {
 	PreviousMessageContext int      `optional:""  default:"10"`
 	Tools                  bool     `optional:"" default:"false"`
 
-	discord              *discordgo.Session
-	users                map[string]string
-	paused               bool
-	messageReplyTicker   *time.Ticker // interval for determining message reply
-	messageContextTicker *time.Ticker // interval for resetting message context
+	MessageReplyInterval       int          `optional:"" default:"2" help:"The base time in seconds between message replies"`
+	MessageReplyIntervalRandom int          `optional:"" default:"4" help:"The time in seconds to add to the base message reply interval"`
+	MessageContextInterval     int          `optional:"" default:"90" help:"The time in seconds until message context is reset"`
+	messageReplyTicker         *time.Ticker // interval for determining message reply
+	messageContextTicker       *time.Ticker // interval for resetting message context
+
+	discord *discordgo.Session
+	users   map[string]string
+	paused  bool
 
 	openai   *openai.Client
 	messages *pkg.LimitedQueue[openai.ChatCompletionMessage]
@@ -152,8 +156,8 @@ func (c *Discord) Run() error {
 }
 
 func (c *Discord) resetMessageReplyTicker() {
-	c.messageReplyTicker.Reset(time.Duration(3+rand.Intn(3)) * time.Second)
-	c.messageContextTicker.Reset(time.Duration(2) * time.Minute)
+	c.messageReplyTicker.Reset(time.Duration(c.MessageReplyInterval+rand.Intn(c.MessageReplyIntervalRandom)) * time.Second)
+	c.messageContextTicker.Reset(time.Duration(c.MessageContextInterval) * time.Second)
 	c.paused = false
 }
 
