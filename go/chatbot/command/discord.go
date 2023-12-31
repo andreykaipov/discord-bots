@@ -17,7 +17,6 @@ import (
 	"github.com/andreykaipov/discord-bots/go/chatbot/pkg"
 	"github.com/bwmarrin/discordgo"
 	openai "github.com/sashabaranov/go-openai"
-	"github.com/sashabaranov/go-openai/jsonschema"
 )
 
 type Discord struct {
@@ -31,11 +30,10 @@ type Discord struct {
 	TopP                   float32  `optional:"" default:"1"`
 	Channel                string   `required:"" help:"A channel ID to reply in"`
 	PreviousMessageContext int      `optional:""  default:"10"`
-	Tools                  bool     `optional:"" default:"false"`
 
 	MessageReplyInterval       int          `optional:"" default:"2" help:"The base time in seconds between message replies"`
 	MessageReplyIntervalRandom int          `optional:"" default:"4" help:"The time in seconds to add to the base message reply interval"`
-	MessageContextInterval     int          `optional:"" default:"90" help:"The time in seconds until message context is reset"`
+	MessageContextInterval     int          `optional:"" default:"30" help:"The time in seconds until message context is reset"`
 	messageReplyTicker         *time.Ticker // interval for determining message reply
 	messageContextTicker       *time.Ticker // interval for resetting message context
 
@@ -45,7 +43,6 @@ type Discord struct {
 
 	openai   *openai.Client
 	messages *pkg.LimitedQueue[openai.ChatCompletionMessage]
-	tools    []openai.Tool
 }
 
 func (c *Discord) AfterApply() error {
@@ -73,33 +70,6 @@ func (c *Discord) AfterApply() error {
 
 	if c.messages == nil {
 		c.messages = pkg.NewLimitedQueue[openai.ChatCompletionMessage](c.PreviousMessageContext)
-	}
-
-	if c.Tools {
-		params := jsonschema.Definition{
-			Type: jsonschema.Object,
-			Properties: map[string]jsonschema.Definition{
-				"location": {
-					Type:        jsonschema.String,
-					Description: "The city and state, e.g. San Francisco, CA",
-				},
-				"unit": {
-					Type: jsonschema.String,
-					Enum: []string{"celsius", "fahrenheit"},
-				},
-			},
-			Required: []string{"location"},
-		}
-		f := openai.FunctionDefinition{
-			Name:        "get_current_weather",
-			Description: "Get the current weather in a given location",
-			Parameters:  params,
-		}
-		t := openai.Tool{
-			Type:     openai.ToolTypeFunction,
-			Function: f,
-		}
-		c.tools = append(c.tools, t)
 	}
 
 	prompt, err := io.ReadAll(c.PromptFile)
@@ -227,10 +197,6 @@ func (c *Discord) makeChatRequestWithMessages(messages []openai.ChatCompletionMe
 		Temperature: c.Temperature,
 		TopP:        c.TopP,
 	}
-	if c.Tools {
-		chatRequest.Tools = c.tools
-		chatRequest.ToolChoice = "auto"
-	}
 	resp, err := c.openai.CreateChatCompletion(context.Background(), chatRequest)
 
 	e := &openai.APIError{}
@@ -253,10 +219,6 @@ func (c *Discord) makeChatRequestWithMessages(messages []openai.ChatCompletionMe
 	}
 
 	response := choices[0].Message
-	if len(response.ToolCalls) > 0 {
-		call := response.ToolCalls[0]
-		return fmt.Sprintf("%v", call.Function)
-	}
 
 	reply := response.Content
 
