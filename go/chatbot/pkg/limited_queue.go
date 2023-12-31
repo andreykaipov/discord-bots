@@ -42,9 +42,9 @@ func (q *LimitedQueue[T]) Items() []T {
 	return q.slice
 }
 
-func (q *LimitedQueue[T]) Last() T {
+func (q *LimitedQueue[T]) LastN(n int) T {
 	if len(q.slice) == 0 {
 		return q.sticky[0]
 	}
-	return q.slice[len(q.slice)-1]
+	return q.slice[len(q.slice)-n]
 }

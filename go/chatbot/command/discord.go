@@ -21,31 +21,37 @@ import (
 
 type Discord struct {
 	Command
-	DiscordToken           string   `required:"" env:"DISCORD_TOKEN"`
-	OpenAIAPIKey           string   `name:"openai-api-key" required:"" env:"OPENAI_API_KEY"`
-	Model                  string   `optional:"" name:"model"`
-	PromptFile             *os.File `required:"" name:"prompt"`
-	UsersFile              *os.File `required:"" name:"users"`
-	Temperature            float32  `optional:"" default:"1"`
-	TopP                   float32  `optional:"" default:"1"`
-	Channel                string   `required:"" help:"A channel ID to reply in"`
-	PreviousMessageContext int      `optional:""  default:"10"`
 
-	MessageReplyInterval       int          `optional:"" default:"2" help:"The base time in seconds between message replies"`
-	MessageReplyIntervalRandom int          `optional:"" default:"4" help:"The time in seconds to add to the base message reply interval"`
-	MessageContextInterval     int          `optional:"" default:"30" help:"The time in seconds until message context is reset"`
+	DiscordToken      string `required:"" env:"DISCORD_TOKEN"`
+	ChatChannel       string `required:"" env:"CHAT_CHANNEL" help:"A channel ID to chat with the bot"`
+	ManagementChannel string `required:"" env:"MGMT_CHANNEL" name:"mgmt-channel" help:"A channel ID to listen for management commands in"`
+	discord           *discordgo.Session
+
+	OpenAIAPIKey string   `name:"openai-api-key" required:"" env:"OPENAI_API_KEY"`
+	Model        string   `optional:"" name:"model" env:"MODEL"`
+	Temperature  float32  `optional:"" default:"1" env:"TEMPERATURE"`
+	TopP         float32  `optional:"" default:"1" env:"TOP_P"`
+	PromptFile   *os.File `required:"" name:"prompt" env:"PROMPT_FILE"`
+	UsersFile    *os.File `required:"" name:"users" env:"USERS_FILE"`
+	users        map[string]string
+	openai       *openai.Client
+
+	MessageContext             int          `optional:"" default:"20" help:"The number of previous messages to send back to OpenAI"`
+	MessageContextInterval     int          `optional:"" default:"90" help:"The time in seconds until previous message context is reset, if no new messages are received"`
+	MessageReplyInterval       int          `optional:"" default:"1" help:"The base time in seconds after a message is received to wait before sending a reply"`
+	MessageReplyIntervalRandom int          `optional:"" default:"5" help:"The time in seconds to add to the base message reply interval"`
+	MessageReplyDoubleChance   int          `optional:"" default:"10" help:"The percent chance that the bot will reply twice in a row"`
 	messageReplyTicker         *time.Ticker // interval for determining message reply
 	messageContextTicker       *time.Ticker // interval for resetting message context
-
-	discord *discordgo.Session
-	users   map[string]string
-	paused  bool
-
-	openai   *openai.Client
-	messages *pkg.LimitedQueue[openai.ChatCompletionMessage]
+	messages                   *pkg.LimitedQueue[openai.ChatCompletionMessage]
+	replying                   bool
 }
 
 func (c *Discord) AfterApply() error {
+	if c.ChatChannel == c.ManagementChannel {
+		return errors.New("chat and management channels cannot be the same")
+	}
+
 	dg, err := discordgo.New("Bot " + c.DiscordToken)
 	if err != nil {
 		return fmt.Errorf("error creating Discord session: %w", err)
@@ -69,7 +75,7 @@ func (c *Discord) AfterApply() error {
 	}
 
 	if c.messages == nil {
-		c.messages = pkg.NewLimitedQueue[openai.ChatCompletionMessage](c.PreviousMessageContext)
+		c.messages = pkg.NewLimitedQueue[openai.ChatCompletionMessage](c.MessageContext)
 	}
 
 	prompt, err := io.ReadAll(c.PromptFile)
@@ -97,7 +103,7 @@ func (c *Discord) Run() error {
 
 	defer func() {
 		_ = c.discord.Close()
-		if _, err := c.discord.ChannelMessageSend(c.Channel, "Bye..."); err != nil {
+		if _, err := c.discord.ChannelMessageSend(c.ChatChannel, "Bye..."); err != nil {
 			fmt.Printf("error sending message: %v\n", err)
 		}
 	}()
@@ -105,16 +111,18 @@ func (c *Discord) Run() error {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 
-	c.resetMessageReplyTicker()
+	c.resetMessageTickers()
 	defer c.messageReplyTicker.Stop()
 	defer c.messageContextTicker.Stop()
 
 	for {
 		select {
 		case <-c.messageReplyTicker.C:
-			c.attemptSendReply(c.Channel)
+			c.attemptSendReply(c.ChatChannel)
 		case <-c.messageContextTicker.C:
-			if !c.paused || len(c.messages.Items()) == 0 {
+			// if the context triggers while we're replying, or if
+			// the queue is already empty, don't reset the queue
+			if c.replying || len(c.messages.Items()) == 0 {
 				continue
 			}
 			c.Kong.Printf("resetting limited queue")
@@ -125,25 +133,30 @@ func (c *Discord) Run() error {
 	}
 }
 
-func (c *Discord) resetMessageReplyTicker() {
+func (c *Discord) resetMessageTickers() {
 	c.messageReplyTicker.Reset(time.Duration(c.MessageReplyInterval+rand.Intn(c.MessageReplyIntervalRandom)) * time.Second)
 	c.messageContextTicker.Reset(time.Duration(c.MessageContextInterval) * time.Second)
-	c.paused = false
+	c.replying = true
 }
 
 func (c *Discord) attemptSendReply(channel string) {
+	fmt.Printf("attempting to send reply\n")
+
 	// don't reply if there are no messages
 	if len(c.messages.Items()) == 0 {
 		c.messageReplyTicker.Stop()
-		c.paused = true
+		c.replying = false
 		return
 	}
 
-	// don't reply to yourself
-	if c.messages.Last().Role == openai.ChatMessageRoleAssistant {
-		c.messageReplyTicker.Stop()
-		c.paused = true
-		return
+	// chance to reply to ourselves, unless we already have (i.e. last two
+	// messages were from the assistant)
+	if c.messages.LastN(1).Role == openai.ChatMessageRoleAssistant {
+		if c.messages.LastN(2).Role == openai.ChatMessageRoleAssistant || rand.Intn(100) < 100-c.MessageReplyDoubleChance {
+			c.messageReplyTicker.Stop()
+			c.replying = false
+			return
+		}
 	}
 
 	_ = c.discord.ChannelTyping(channel)
@@ -154,14 +167,22 @@ func (c *Discord) attemptSendReply(channel string) {
 	}
 }
 
-func (c *Discord) username(id string) string {
-	return strings.Title(strings.Split(c.users[id], "-")[0])
+func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
+
 }
 
 func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.ChannelID != c.Channel {
+	switch m.ChannelID {
+	case c.ManagementChannel:
+		c.handleManagementMessage(s, m)
+	case c.ChatChannel:
+		c.handleChatMessage(s, m)
+	default:
 		return
 	}
+}
+
+func (c *Discord) handleChatMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "//") {
 		return
 	}
@@ -180,14 +201,17 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	} else {
 		// if a non-bot user sent a message, reset the ticker and start
 		// typing because the bot will reply on the next ticker interval
-		c.resetMessageReplyTicker()
+		c.resetMessageTickers()
 		c.discord.ChannelTyping(m.ChannelID)
 		message.Role = openai.ChatMessageRoleUser
 		message.Content = fmt.Sprintf("%s: %s", c.username(m.Author.ID), m.Content)
 	}
 
-	fmt.Println(message.Content)
 	c.messages.Add(message)
+}
+
+func (c *Discord) username(id string) string {
+	return strings.Title(strings.Split(c.users[id], "-")[0])
 }
 
 func (c *Discord) makeChatRequestWithMessages(messages []openai.ChatCompletionMessage) string {
@@ -216,6 +240,10 @@ func (c *Discord) makeChatRequestWithMessages(messages []openai.ChatCompletionMe
 	choices := resp.Choices
 	if len(choices) < 1 {
 		return ""
+	}
+
+	for _, choice := range choices {
+		fmt.Printf("%s: %s\n", choice.FinishReason, choice.Message.Content)
 	}
 
 	response := choices[0].Message
