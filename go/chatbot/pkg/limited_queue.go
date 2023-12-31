@@ -29,13 +29,22 @@ func (q *LimitedQueue[T]) AddSticky(item T) {
 	q.sticky = append(q.sticky, item)
 }
 
-// The sticky items are always at the beginning of the queue
-func (q *LimitedQueue[T]) AllItems() []T {
-	return append(q.sticky, q.slice...)
+func (q *LimitedQueue[T]) Clear() {
+	q.ClearSticky()
+	q.ClearNonSticky()
+}
+
+func (q *LimitedQueue[T]) ClearSticky() {
+	q.sticky = make([]T, 0)
 }
 
 func (q *LimitedQueue[T]) ClearNonSticky() {
 	q.slice = make([]T, 0)
+}
+
+// The sticky items are always at the beginning of the queue
+func (q *LimitedQueue[T]) AllItems() []T {
+	return append(q.sticky, q.slice...)
 }
 
 func (q *LimitedQueue[T]) Items() []T {

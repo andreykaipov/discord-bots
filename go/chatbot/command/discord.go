@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/andreykaipov/discord-bots/go/chatbot/pkg"
 	"github.com/bwmarrin/discordgo"
 	openai "github.com/sashabaranov/go-openai"
+	"gopkg.in/yaml.v3"
 )
 
 type Discord struct {
@@ -31,20 +33,32 @@ type Discord struct {
 	Model        string   `optional:"" name:"model" env:"MODEL"`
 	Temperature  float32  `optional:"" default:"1" env:"TEMPERATURE"`
 	TopP         float32  `optional:"" default:"1" env:"TOP_P"`
-	PromptFile   *os.File `required:"" name:"prompt" env:"PROMPT_FILE"`
-	UsersFile    *os.File `required:"" name:"users" env:"USERS_FILE"`
+	Prompts      *os.File `required:"" name:"prompts" env:"PROMPTS"`
+	prompts      *prompts
+	rawPrompts   []byte
+	personality  string   // the current prompt name
+	Users        *os.File `required:"" name:"users" env:"USERS"`
 	users        map[string]string
+	rawUsers     []byte
 	openai       *openai.Client
 
-	MessageContext             int          `optional:"" default:"20" help:"The number of previous messages to send back to OpenAI"`
-	MessageContextInterval     int          `optional:"" default:"90" help:"The time in seconds until previous message context is reset, if no new messages are received"`
-	MessageReplyInterval       int          `optional:"" default:"1" help:"The base time in seconds after a message is received to wait before sending a reply"`
-	MessageReplyIntervalRandom int          `optional:"" default:"5" help:"The time in seconds to add to the base message reply interval"`
-	MessageReplyDoubleChance   int          `optional:"" default:"10" help:"The percent chance that the bot will reply twice in a row"`
+	MessageContext             int          `optional:"" default:"20" env:"MESSAGE_CONTEXT" help:"The number of previous messages to send back to OpenAI"`
+	MessageContextInterval     int          `optional:"" default:"90" env:"MESSAGE_CONTEXT_INTERVAL" help:"The time in seconds until previous message context is reset, if no new messages are received"`
+	MessageReplyInterval       int          `optional:"" default:"1" env:"MESSAGE_REPLY_INTERVAL" help:"The base time in seconds after a message is received to wait before sending a reply"`
+	MessageReplyIntervalJitter int          `optional:"" default:"4" env:"MESSAGE_REPLY_INTERVAL_JITTER" help:"A randomized time [0,n) in seconds to add to the base message reply interval"`
+	MessageSelfReplyChance     int          `optional:"" default:"10" env:"MESSAGE_SELF_REPLY_CHANCE" help:"The percent chance that the bot will reply twice in a row"`
 	messageReplyTicker         *time.Ticker // interval for determining message reply
 	messageContextTicker       *time.Ticker // interval for resetting message context
 	messages                   *pkg.LimitedQueue[openai.ChatCompletionMessage]
 	replying                   bool
+}
+
+type prompts struct {
+	Meta struct {
+		Prefix string `yaml:"prefix"`
+		Suffix string `yaml:"suffix"`
+	} `yaml:"meta"`
+	Personalities map[string]string `yaml:"personalities"`
 }
 
 func (c *Discord) AfterApply() error {
@@ -69,7 +83,6 @@ func (c *Discord) AfterApply() error {
 	if c.openai == nil {
 		c.openai = openai.NewClient(c.OpenAIAPIKey)
 	}
-
 	if c.Model == "" {
 		c.Model = openai.GPT3Dot5Turbo
 	}
@@ -77,24 +90,41 @@ func (c *Discord) AfterApply() error {
 	if c.messages == nil {
 		c.messages = pkg.NewLimitedQueue[openai.ChatCompletionMessage](c.MessageContext)
 	}
-
-	prompt, err := io.ReadAll(c.PromptFile)
-	if err != nil {
+	if err := c.parsePrompts(); err != nil {
 		return err
 	}
-	c.messages.AddSticky(openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleSystem,
-		Content: string(prompt),
-	})
-
-	users, err := io.ReadAll(c.UsersFile)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(users, &c.users); err != nil {
+	if err := c.parseUsers(); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (c *Discord) parsePrompts() error {
+	var err error
+	if c.rawPrompts, err = io.ReadAll(c.Prompts); err != nil {
+		return err
+	}
+	if err := yaml.Unmarshal(c.rawPrompts, &c.prompts); err != nil {
+		return err
+	}
+
+	personalities := c.prompts.Personalities
+	for name, prompt := range personalities {
+		personalities[name] = fmt.Sprintf("%s%s%s", c.prompts.Meta.Prefix, prompt, c.prompts.Meta.Suffix)
+	}
+
+	return nil
+}
+
+func (c *Discord) parseUsers() error {
+	var err error
+	if c.rawUsers, err = io.ReadAll(c.Users); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(c.rawUsers, &c.users); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -103,14 +133,18 @@ func (c *Discord) Run() error {
 
 	defer func() {
 		_ = c.discord.Close()
-		if _, err := c.discord.ChannelMessageSend(c.ChatChannel, "Bye..."); err != nil {
+		if _, err := c.discord.ChannelMessageSend(c.ManagementChannel, "shutting down..."); err != nil {
 			fmt.Printf("error sending message: %v\n", err)
 		}
 	}()
+	if _, err := c.discord.ChannelMessageSend(c.ManagementChannel, "started up!"); err != nil {
+		fmt.Printf("error sending message: %v\n", err)
+	}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 
+	c.resetMessageQueue("")
 	c.resetMessageTickers()
 	defer c.messageReplyTicker.Stop()
 	defer c.messageContextTicker.Stop()
@@ -125,16 +159,35 @@ func (c *Discord) Run() error {
 			if c.replying || len(c.messages.Items()) == 0 {
 				continue
 			}
-			c.Kong.Printf("resetting limited queue")
-			c.messages.ClearNonSticky()
+			// choose a random personality on reset
+			c.resetMessageQueue("")
 		case <-sc:
 			return nil
 		}
 	}
 }
 
+func (c *Discord) resetMessageQueue(personality string) {
+	defer func() {
+		c.Kong.Printf("reset limited queue, current prompt: %s", c.personality)
+	}()
+
+	c.personality = personality
+	if personality == "" {
+		c.personality, _ = getRandom(c.prompts.Personalities)
+	}
+
+	prompt := c.prompts.Personalities[c.personality]
+
+	c.messages = pkg.NewLimitedQueue[openai.ChatCompletionMessage](c.MessageContext)
+	c.messages.AddSticky(openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleSystem,
+		Content: prompt,
+	})
+}
+
 func (c *Discord) resetMessageTickers() {
-	c.messageReplyTicker.Reset(time.Duration(c.MessageReplyInterval+rand.Intn(c.MessageReplyIntervalRandom)) * time.Second)
+	c.messageReplyTicker.Reset(time.Duration(c.MessageReplyInterval+rand.Intn(c.MessageReplyIntervalJitter)) * time.Second)
 	c.messageContextTicker.Reset(time.Duration(c.MessageContextInterval) * time.Second)
 	c.replying = true
 }
@@ -152,7 +205,7 @@ func (c *Discord) attemptSendReply(channel string) {
 	// chance to reply to ourselves, unless we already have (i.e. last two
 	// messages were from the assistant)
 	if c.messages.LastN(1).Role == openai.ChatMessageRoleAssistant {
-		if c.messages.LastN(2).Role == openai.ChatMessageRoleAssistant || rand.Intn(100) < 100-c.MessageReplyDoubleChance {
+		if c.messages.LastN(2).Role == openai.ChatMessageRoleAssistant || rand.Intn(100) < 100-c.MessageSelfReplyChance {
 			c.messageReplyTicker.Stop()
 			c.replying = false
 			return
@@ -168,7 +221,166 @@ func (c *Discord) attemptSendReply(channel string) {
 }
 
 func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
 
+	var msg string
+	switch {
+	case m.Content == ".help":
+		msg = `
+.help - show this help message
+.ping - pong
+.info - show the internal settings of the bot
+.model - set the model of the bot
+.reset - reset the bot
+.users - show the known users
+.prompts - show the available prompts
+.prompts add - add a new prompt (do not include the prefix or suffix)
+.set [key] [value] - set a key/value pair in the bot's settings
+`
+	case m.Content == ".ping":
+		msg = "pong"
+	case m.Content == ".reset":
+		c.resetMessageQueue("")
+		c.resetMessageTickers()
+	case m.Content == ".users":
+		msg = string(c.rawUsers)
+	case m.Content == ".prompts":
+		b, _ := yaml.Marshal(c.prompts.Meta)
+		for name, prompt := range c.prompts.Personalities {
+			prompt = strings.TrimPrefix(prompt, c.prompts.Meta.Prefix)
+			prompt = strings.TrimSuffix(prompt, c.prompts.Meta.Suffix)
+			b = append(b, []byte(name+": |\n")...)
+			b = append(b, []byte("    "+prompt)...)
+		}
+		fmt.Printf("%#v\n", c.prompts.Personalities)
+		msg = string(b)
+	case strings.HasPrefix(m.Content, ".prompts add"):
+		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".prompts add"))
+		splat := strings.SplitN(val, " ", 2)
+		if len(splat) != 2 {
+			msg = "please provide a prompt name and prompt to add"
+			break
+		}
+		name := splat[0]
+		prompt := splat[1]
+		c.prompts.Personalities[name] = prompt
+	case m.Content == ".info":
+		host, _ := os.Hostname()
+		msg = fmt.Sprintf(`
+Host: %s
+Model: %s
+Prompt: %s
+Temperature: %f
+Top P: %f
+Messages: %d
+Message Context: %d
+Message Context Interval: %ds
+Message Reply Interval: %ds
+Message Reply Interval Jitter: %ds
+Message Self Reply Chance: %d%%
+`, host, c.Model, c.personality, c.Temperature, c.TopP, len(c.messages.AllItems()), c.MessageContext, c.MessageContextInterval, c.MessageReplyInterval, c.MessageReplyIntervalJitter, c.MessageSelfReplyChance)
+	case strings.HasPrefix(m.Content, ".set"):
+		content := strings.TrimSpace(strings.TrimPrefix(m.Content, ".set"))
+		parts := strings.SplitN(content, " ", 2)
+		if len(parts) != 2 {
+			msg = "invalid number of arguments"
+			break
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		c.setKeyVal(key, val)
+	default:
+		msg = "unknown command, please try .help"
+	}
+
+	var err error
+	if msg == "" {
+		msg = "ok"
+	}
+
+	if len(msg) > 1000 {
+		r := strings.NewReader(strings.TrimSpace(msg))
+		_, err = c.discord.ChannelFileSend(m.ChannelID, "output.txt", r)
+	} else {
+		_, err = c.discord.ChannelMessageSend(m.ChannelID, "```"+strings.TrimSpace(msg)+"```")
+	}
+	if err != nil {
+		c.Kong.Printf("error sending message: %v", err)
+	}
+}
+
+// thank you copilot
+func (c *Discord) setKeyVal(key, val string) string {
+	switch key {
+	case "model":
+		c.Model = val
+		return fmt.Sprintf("set model to %s", c.Model)
+	case "temperature":
+		f, err := strconv.ParseFloat(val, 32)
+		if err != nil {
+			return fmt.Sprintf("error parsing temperature: %v", err)
+		}
+		c.Temperature = float32(f)
+		return fmt.Sprintf("set temperature to %f", c.Temperature)
+	case "top_p":
+		f, err := strconv.ParseFloat(val, 32)
+		if err != nil {
+			return fmt.Sprintf("error parsing top_p: %v", err)
+		}
+		c.TopP = float32(f)
+		return fmt.Sprintf("set top_p to %f", c.TopP)
+	case "prompt":
+		if _, ok := c.prompts.Personalities[val]; !ok {
+			return "please provide a valid prompt name"
+		}
+		c.resetMessageQueue(val)
+		c.resetMessageTickers()
+		return fmt.Sprintf("set prompt to %s", val)
+	case "message_context":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_context: %v", err)
+		}
+		c.MessageContext = i
+		c.resetMessageQueue(c.personality)
+		c.resetMessageTickers()
+		return fmt.Sprintf("set message_context to %d", c.MessageContext)
+	case "message_reply_interval":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_reply_interval: %v", err)
+		}
+		c.MessageReplyInterval = i
+		c.resetMessageTickers()
+		return fmt.Sprintf("set message_reply_interval to %d", c.MessageReplyInterval)
+	case "message_reply_interval_random":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_reply_interval_random: %v", err)
+		}
+		c.MessageReplyIntervalJitter = i
+		c.resetMessageTickers()
+		return fmt.Sprintf("set message_reply_interval_random to %d", c.MessageReplyIntervalJitter)
+	case "message_context_interval":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_context_interval: %v", err)
+		}
+		c.MessageContextInterval = i
+		c.resetMessageTickers()
+		return fmt.Sprintf("set message_context_interval to %d", c.MessageContextInterval)
+	case "message_self_reply_chance":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_self_reply_chance: %v", err)
+		}
+		c.MessageSelfReplyChance = i
+		return fmt.Sprintf("set message_self_reply_chance to %d", c.MessageSelfReplyChance)
+	default:
+		return "unknown key"
+	}
 }
 
 func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -257,4 +469,15 @@ func (c *Discord) makeChatRequestWithMessages(messages []openai.ChatCompletionMe
 	reply = regexp.MustCompile(`(?mi)(^[^: ]+:[ ]+)+`).ReplaceAllString(reply, "")
 
 	return reply
+}
+
+func getRandom(m map[string]string) (string, string) {
+	i := rand.Intn(len(m))
+	for key, val := range m {
+		if i == 0 {
+			return key, val
+		}
+		i--
+	}
+	return "", ""
 }
