@@ -34,6 +34,10 @@ func (q *LimitedQueue[T]) AllItems() []T {
 	return append(q.sticky, q.slice...)
 }
 
+func (q *LimitedQueue[T]) ClearNonSticky() {
+	q.slice = make([]T, 0)
+}
+
 func (q *LimitedQueue[T]) Items() []T {
 	return q.slice
 }

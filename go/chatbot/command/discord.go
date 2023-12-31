@@ -118,7 +118,7 @@ func (c *Discord) Run() error {
 				continue
 			}
 			c.Kong.Printf("resetting limited queue")
-			c.messages = pkg.NewLimitedQueue[openai.ChatCompletionMessage](c.PreviousMessageContext)
+			c.messages.ClearNonSticky()
 		case <-sc:
 			return nil
 		}
