@@ -234,8 +234,9 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 .info - show the internal settings of the bot
 .reset - reset the bot
 .users - show the known users
-.prompts - show the available prompts
-.prompts add - add a new prompt (do not include the prefix or suffix)
+.prompt - show the available prompts
+.prompt add [name] [...] - add a new prompt (do not include the prefix or suffix)
+.prompt rm [name] - remove a prompt
 .set [key] [value] - set a key/value pair in the bot's settings
 `
 	case m.Content == ".ping":
@@ -245,18 +246,24 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 		c.resetMessageTickers()
 	case m.Content == ".users":
 		msg = string(c.rawUsers)
-	case m.Content == ".prompts":
+	case m.Content == ".prompt":
 		b, _ := yaml.Marshal(c.prompts.Meta)
 		for name, prompt := range c.prompts.Personalities {
 			prompt = strings.TrimPrefix(prompt, c.prompts.Meta.Prefix)
 			prompt = strings.TrimSuffix(prompt, c.prompts.Meta.Suffix)
 			b = append(b, []byte(name+": |\n")...)
-			b = append(b, []byte("    "+prompt)...)
+			prompt = strings.TrimSpace(prompt)
+			for _, line := range strings.SplitAfter(prompt, ".") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				b = append(b, []byte("    "+line+"\n")...)
+			}
 		}
-		fmt.Printf("%#v\n", c.prompts.Personalities)
 		msg = string(b)
-	case strings.HasPrefix(m.Content, ".prompts add"):
-		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".prompts add"))
+	case strings.HasPrefix(m.Content, ".prompt add"):
+		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".prompt add"))
 		splat := strings.SplitN(val, " ", 2)
 		if len(splat) != 2 {
 			msg = "please provide a prompt name and prompt to add"
@@ -264,13 +271,16 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 		}
 		name := splat[0]
 		prompt := splat[1]
-		if prompt == "" {
-			delete(c.prompts.Personalities, name)
-			msg = fmt.Sprintf("removed prompt %s", name)
-		} else {
-			c.prompts.Personalities[name] = prompt
-			msg = fmt.Sprintf("added prompt %s", name)
+		c.prompts.Personalities[name] = prompt
+		msg = fmt.Sprintf("added prompt %s", name)
+	case strings.HasPrefix(m.Content, ".prompt rm"):
+		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".prompt rm"))
+		if _, ok := c.prompts.Personalities[val]; !ok {
+			msg = fmt.Sprintf("prompt %s does not exist", val)
+			break
 		}
+		delete(c.prompts.Personalities, val)
+		msg = fmt.Sprintf("removed prompt %s", val)
 	case m.Content == ".info":
 		host, _ := os.Hostname()
 		uptime := time.Since(c.startTime)
