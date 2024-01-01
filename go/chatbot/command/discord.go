@@ -232,7 +232,6 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 .help - show this help message
 .ping - pong
 .info - show the internal settings of the bot
-.model - set the model of the bot
 .reset - reset the bot
 .users - show the known users
 .prompts - show the available prompts
@@ -269,17 +268,17 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 	case m.Content == ".info":
 		host, _ := os.Hostname()
 		msg = fmt.Sprintf(`
-Host: %s
-Model: %s
-Prompt: %s
-Temperature: %f
-Top P: %f
-Messages: %d
-Message Context: %d
-Message Context Interval: %ds
-Message Reply Interval: %ds
-Message Reply Interval Jitter: %ds
-Message Self Reply Chance: %d%%
+host: %s
+model: %s
+prompt: %s
+top_p: %f
+temperature: %f
+queued_messages: %d
+message_context: %d
+message_context_interval: %ds
+message_reply_interval: %ds
+message_reply_interval_jitter: %ds
+message_self_reply_chance: %d%%
 `, host, c.Model, c.personality, c.Temperature, c.TopP, len(c.messages.AllItems()), c.MessageContext, c.MessageContextInterval, c.MessageReplyInterval, c.MessageReplyIntervalJitter, c.MessageSelfReplyChance)
 	case strings.HasPrefix(m.Content, ".set"):
 		content := strings.TrimSpace(strings.TrimPrefix(m.Content, ".set"))
@@ -290,7 +289,7 @@ Message Self Reply Chance: %d%%
 		}
 		key := strings.TrimSpace(parts[0])
 		val := strings.TrimSpace(parts[1])
-		c.setKeyVal(key, val)
+		msg = c.setKeyVal(key, val)
 	default:
 		msg = "unknown command, please try .help"
 	}
@@ -317,20 +316,6 @@ func (c *Discord) setKeyVal(key, val string) string {
 	case "model":
 		c.Model = val
 		return fmt.Sprintf("set model to %s", c.Model)
-	case "temperature":
-		f, err := strconv.ParseFloat(val, 32)
-		if err != nil {
-			return fmt.Sprintf("error parsing temperature: %v", err)
-		}
-		c.Temperature = float32(f)
-		return fmt.Sprintf("set temperature to %f", c.Temperature)
-	case "top_p":
-		f, err := strconv.ParseFloat(val, 32)
-		if err != nil {
-			return fmt.Sprintf("error parsing top_p: %v", err)
-		}
-		c.TopP = float32(f)
-		return fmt.Sprintf("set top_p to %f", c.TopP)
 	case "prompt":
 		if _, ok := c.prompts.Personalities[val]; !ok {
 			return "please provide a valid prompt name"
@@ -338,6 +323,20 @@ func (c *Discord) setKeyVal(key, val string) string {
 		c.resetMessageQueue(val)
 		c.resetMessageTickers()
 		return fmt.Sprintf("set prompt to %s", val)
+	case "top_p":
+		f, err := strconv.ParseFloat(val, 32)
+		if err != nil {
+			return fmt.Sprintf("error parsing top_p: %v", err)
+		}
+		c.TopP = float32(f)
+		return fmt.Sprintf("set top_p to %f", c.TopP)
+	case "temperature":
+		f, err := strconv.ParseFloat(val, 32)
+		if err != nil {
+			return fmt.Sprintf("error parsing temperature: %v", err)
+		}
+		c.Temperature = float32(f)
+		return fmt.Sprintf("set temperature to %f", c.Temperature)
 	case "message_context":
 		i, err := strconv.Atoi(val)
 		if err != nil {
@@ -347,22 +346,6 @@ func (c *Discord) setKeyVal(key, val string) string {
 		c.resetMessageQueue(c.personality)
 		c.resetMessageTickers()
 		return fmt.Sprintf("set message_context to %d", c.MessageContext)
-	case "message_reply_interval":
-		i, err := strconv.Atoi(val)
-		if err != nil {
-			return fmt.Sprintf("error parsing message_reply_interval: %v", err)
-		}
-		c.MessageReplyInterval = i
-		c.resetMessageTickers()
-		return fmt.Sprintf("set message_reply_interval to %d", c.MessageReplyInterval)
-	case "message_reply_interval_random":
-		i, err := strconv.Atoi(val)
-		if err != nil {
-			return fmt.Sprintf("error parsing message_reply_interval_random: %v", err)
-		}
-		c.MessageReplyIntervalJitter = i
-		c.resetMessageTickers()
-		return fmt.Sprintf("set message_reply_interval_random to %d", c.MessageReplyIntervalJitter)
 	case "message_context_interval":
 		i, err := strconv.Atoi(val)
 		if err != nil {
@@ -371,6 +354,22 @@ func (c *Discord) setKeyVal(key, val string) string {
 		c.MessageContextInterval = i
 		c.resetMessageTickers()
 		return fmt.Sprintf("set message_context_interval to %d", c.MessageContextInterval)
+	case "message_reply_interval":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_reply_interval: %v", err)
+		}
+		c.MessageReplyInterval = i
+		c.resetMessageTickers()
+		return fmt.Sprintf("set message_reply_interval to %d", c.MessageReplyInterval)
+	case "message_reply_interval_jitter":
+		i, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Sprintf("error parsing message_reply_interval_jitter: %v", err)
+		}
+		c.MessageReplyIntervalJitter = i
+		c.resetMessageTickers()
+		return fmt.Sprintf("set message_reply_interval_jitter to %d", c.MessageReplyIntervalJitter)
 	case "message_self_reply_chance":
 		i, err := strconv.Atoi(val)
 		if err != nil {
@@ -379,7 +378,8 @@ func (c *Discord) setKeyVal(key, val string) string {
 		c.MessageSelfReplyChance = i
 		return fmt.Sprintf("set message_self_reply_chance to %d", c.MessageSelfReplyChance)
 	default:
-		return "unknown key"
+		validKeys := []string{"model", "prompt", "top_p", "temperature", "message_context", "message_context_interval", "message_reply_interval", "message_reply_interval_jitter", "message_self_reply_chance"}
+		return fmt.Sprintf("unknown key, valid keys are: %s", strings.Join(validKeys, ", "))
 	}
 }
 
