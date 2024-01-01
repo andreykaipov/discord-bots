@@ -481,10 +481,10 @@ func (c *Discord) makeChatRequestWithMessages(messages []openai.ChatCompletionMe
 	reply := response.Content
 
 	// Sometimes the model prepends a name into its reply, like "Name:
-	// hello" or "You: hello". This removes any prepended name from its
+	// hello" or "- You: hello". This removes any prepended name from its
 	// reply so that it looks natural on Discord.
 	// fmt.Println("original reply:", reply)
-	reply = regexp.MustCompile(`(?mi)(^[^: ]+:[ ]+)+`).ReplaceAllString(reply, "")
+	reply = regexp.MustCompile(`(?mi)(^[^:]+:[ ]+)+`).ReplaceAllString(reply, "")
 
 	return reply
 }
