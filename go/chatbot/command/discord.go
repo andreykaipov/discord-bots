@@ -264,7 +264,13 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 		}
 		name := splat[0]
 		prompt := splat[1]
-		c.prompts.Personalities[name] = prompt
+		if prompt == "" {
+			delete(c.prompts.Personalities, name)
+			msg = fmt.Sprintf("removed prompt %s", name)
+		} else {
+			c.prompts.Personalities[name] = prompt
+			msg = fmt.Sprintf("added prompt %s", name)
+		}
 	case m.Content == ".info":
 		host, _ := os.Hostname()
 		uptime := time.Since(c.startTime)
