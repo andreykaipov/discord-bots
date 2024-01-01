@@ -11,4 +11,4 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/app "$module"
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /work/bin/app /app
-CMD ["/app"]
+ENTRYPOINT ["/app"]
