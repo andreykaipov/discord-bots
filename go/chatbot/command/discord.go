@@ -267,8 +267,10 @@ func (c *Discord) handleManagementMessage(s *discordgo.Session, m *discordgo.Mes
 		c.prompts.Personalities[name] = prompt
 	case m.Content == ".info":
 		host, _ := os.Hostname()
+		uptime := time.Since(c.startTime)
 		msg = fmt.Sprintf(`
 host: %s
+uptime: %s
 model: %s
 prompt: %s
 top_p: %f
@@ -279,7 +281,7 @@ message_context_interval: %ds
 message_reply_interval: %ds
 message_reply_interval_jitter: %ds
 message_self_reply_chance: %d%%
-`, host, c.Model, c.personality, c.Temperature, c.TopP, len(c.messages.AllItems()), c.MessageContext, c.MessageContextInterval, c.MessageReplyInterval, c.MessageReplyIntervalJitter, c.MessageSelfReplyChance)
+`, host, uptime, c.Model, c.personality, c.Temperature, c.TopP, len(c.messages.AllItems()), c.MessageContext, c.MessageContextInterval, c.MessageReplyInterval, c.MessageReplyIntervalJitter, c.MessageSelfReplyChance)
 	case strings.HasPrefix(m.Content, ".set"):
 		content := strings.TrimSpace(strings.TrimPrefix(m.Content, ".set"))
 		parts := strings.SplitN(content, " ", 2)

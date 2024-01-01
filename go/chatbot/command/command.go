@@ -10,7 +10,8 @@ import (
 )
 
 type Context struct {
-	Kong *kong.Context `kong:"-"`
+	Kong      *kong.Context `kong:"-"`
+	startTime time.Time
 }
 
 type CommonFlags struct{}
@@ -33,7 +34,8 @@ func (cmd *Command) BeforeResolve(ctx *Context) error {
 }
 
 func (ctx *Context) BeforeApply() error {
-	rand.Seed(time.Now().UTC().UnixNano())
+	ctx.startTime = time.Now()
+	rand.Seed(ctx.startTime.UnixNano())
 	return nil
 }
 
