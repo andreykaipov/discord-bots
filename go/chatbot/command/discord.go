@@ -133,13 +133,13 @@ func (c *Discord) Run() error {
 
 	defer func() {
 		_ = c.discord.Close()
-		if _, err := c.discord.ChannelMessageSend(c.ManagementChannel, "shutting down..."); err != nil {
-			fmt.Printf("error sending message: %v\n", err)
-		}
+		//if _, err := c.discord.ChannelMessageSend(c.ManagementChannel, "shutting down..."); err != nil {
+		//	fmt.Printf("error sending message: %v\n", err)
+		//}
 	}()
-	if _, err := c.discord.ChannelMessageSend(c.ManagementChannel, "started up!"); err != nil {
-		fmt.Printf("error sending message: %v\n", err)
-	}
+	//if _, err := c.discord.ChannelMessageSend(c.ManagementChannel, "started up!"); err != nil {
+	//	fmt.Printf("error sending message: %v\n", err)
+	//}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
