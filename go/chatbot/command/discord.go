@@ -297,7 +297,7 @@ message_context_interval: %ds
 message_reply_interval: %ds
 message_reply_interval_jitter: %ds
 message_self_reply_chance: %d%%
-`, host, uptime, c.Model, c.personality, c.Temperature, c.TopP, len(c.messages.AllItems()), c.MessageContext, c.MessageContextInterval, c.MessageReplyInterval, c.MessageReplyIntervalJitter, c.MessageSelfReplyChance)
+`, host, uptime, c.Model, c.personality, c.TopP, c.Temperature, len(c.messages.AllItems()), c.MessageContext, c.MessageContextInterval, c.MessageReplyInterval, c.MessageReplyIntervalJitter, c.MessageSelfReplyChance)
 	case strings.HasPrefix(m.Content, ".set"):
 		content := strings.TrimSpace(strings.TrimPrefix(m.Content, ".set"))
 		parts := strings.SplitN(content, " ", 2)
