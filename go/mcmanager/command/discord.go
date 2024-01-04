@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -77,56 +78,69 @@ func (c *Discord) Run() error {
 		return err
 	}
 
-	cfg := c.serverConfig
-	ticker := time.NewTicker(cfg.CheckInterval)
-	for ; true; <-ticker.C {
-		for _, server := range cfg.Servers {
-			if !server.online {
-				continue
+	wg := sync.WaitGroup{}
+	for _, s := range c.serverConfig.Servers {
+		wg.Add(1)
+		go func(s *server) {
+			defer wg.Done()
+			ticker := time.NewTicker(s.CheckInterval)
+			defer ticker.Stop()
+			for ; true; <-ticker.C {
+				c.deallocateCondionally(s)
 			}
-			c.Kong.Printf("checking server: %s", server.Host)
-			pong, err := c.checkServer(server)
-			if err != nil {
-				c.Kong.Printf("error checking server: %s: %s", server.Host, err)
-				server.checkErrors++
-				continue
-			}
-
-			switch pong.PlayerCount {
-			case 0:
-				server.checkCount++
-				msg := fmt.Sprintf("%s has no players online (check count: %d)", server.Host, server.checkCount)
-				c.Kong.Printf(msg)
-				// _ = c.sendMessagef(msg)
-			default:
-				server.checkCount = 0
-				server.checkErrors = 0
-			}
-
-			var msg string
-			if server.checkErrors >= cfg.DeallocationThreshold {
-				msg = fmt.Sprintf("%s deallocating because it had %d consecutive errors", server.Host, cfg.DeallocationThreshold)
-				server.online = false
-			}
-			if server.checkCount >= cfg.DeallocationThreshold {
-				total := time.Duration(cfg.DeallocationThreshold) * cfg.CheckInterval
-				msg = fmt.Sprintf("%s deallocating because it had no players for %s", server.Host, total)
-				server.online = false
-			}
-
-			// we've mark errored servers or servers with no online
-			// players as offline before deallocation so we don't
-			// try to check them again
-			if !server.online {
-				c.Kong.Printf(msg)
-				_ = c.sendMessagef(msg)
-				go c.deallocateServer(server)
-			}
-
-			// c.Kong.Printf(pong.Pretty())
-		}
+		}(s)
 	}
+	wg.Wait()
 	return nil
+}
+
+// will only deallocate if the server has errored or has zero players for
+// consecutive checks equal to the deallocation threshold
+func (c *Discord) deallocateCondionally(s *server) {
+	if !s.online {
+		return
+	}
+
+	c.Kong.Printf("checking server: %s", s.Host)
+	pong, err := c.checkServer(s)
+	if err != nil {
+		c.Kong.Printf("error checking server: %s: %s", s.Host, err)
+		s.checkErrors++
+		return
+	}
+
+	switch pong.PlayerCount {
+	case 0:
+		s.checkCount++
+		msg := fmt.Sprintf("%s has no players online (check count: %d)", s.Host, s.checkCount)
+		c.Kong.Printf(msg)
+		// _ = c.sendMessagef(msg)
+	default:
+		s.checkCount = 0
+		s.checkErrors = 0
+	}
+
+	var msg string
+	if s.checkErrors >= s.DeallocationThreshold {
+		msg = fmt.Sprintf("%s deallocating because it had %d consecutive errors", s.Host, s.DeallocationThreshold)
+		s.online = false
+	}
+	if s.checkCount >= s.DeallocationThreshold {
+		total := time.Duration(s.DeallocationThreshold) * s.CheckInterval
+		msg = fmt.Sprintf("%s deallocating because it had no players for %s", s.Host, total)
+		s.online = false
+	}
+
+	// we've mark errored servers or servers with no online
+	// players as offline before deallocation so we don't
+	// try to check them again
+	if !s.online {
+		c.Kong.Printf(msg)
+		_ = c.sendMessagef(msg)
+		go c.deallocateServer(s)
+	}
+
+	// c.Kong.Printf(pong.Pretty())
 }
 
 func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {

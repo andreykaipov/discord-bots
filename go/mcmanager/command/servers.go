@@ -15,10 +15,12 @@ type serverConfig struct {
 }
 
 type server struct {
-	Host          string        `yaml:"host"`
-	Name          string        `yaml:"name"`
-	ResourceGroup string        `yaml:"resource_group"`
-	CheckTimeout  time.Duration `yaml:"check_timeout"`
+	Host                  string        `yaml:"host"`
+	Name                  string        `yaml:"name"`
+	ResourceGroup         string        `yaml:"resource_group"`
+	CheckTimeout          time.Duration `yaml:"check_timeout"`
+	CheckInterval         time.Duration `yaml:"check_interval"`
+	DeallocationThreshold int           `yaml:"deallocation_threshold"`
 
 	host        string
 	port        string
@@ -83,6 +85,12 @@ func (c *Discord) setServerDefaults(s *server) error {
 	}
 	if s.CheckTimeout == 0 {
 		s.CheckTimeout = c.serverConfig.CheckTimeout
+	}
+	if s.CheckInterval == 0 {
+		s.CheckInterval = c.serverConfig.CheckInterval
+	}
+	if s.DeallocationThreshold == 0 {
+		s.DeallocationThreshold = c.serverConfig.DeallocationThreshold
 	}
 	return nil
 }
