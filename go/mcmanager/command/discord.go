@@ -80,7 +80,9 @@ func (c *Discord) Run() error {
 
 	wg := sync.WaitGroup{}
 	for _, s := range c.serverConfig.Servers {
+		// on startup, assume all servers are online
 		wg.Add(1)
+		s.online = true
 		go func(s *server) {
 			defer wg.Done()
 			ticker := time.NewTicker(s.CheckInterval)
