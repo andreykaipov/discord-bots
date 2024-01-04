@@ -128,9 +128,16 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		return
 	}
 
+	cmdArgs := strings.SplitN(m.Content, " ", 2)
+	cmd := cmdArgs[0]
+	args := ""
+	if len(cmdArgs) > 1 {
+		args = strings.TrimSpace(cmdArgs[1])
+	}
+
 	var msg string
-	switch {
-	case m.Content == ".help":
+	switch cmd {
+	case ".help":
 		msg = `
 .help - show this help message
 .ping - pong
@@ -140,24 +147,24 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 .start <server> - start a server
 .stop <server> - stop a server
 `
-	case m.Content == ".ping":
+	case ".ping":
 		s.ChannelMessageSend(m.ChannelID, "pong")
-	case m.Content == ".uptime":
+	case ".uptime":
 		host, _ := os.Hostname()
 		uptime := time.Since(c.startTime)
 		msg = fmt.Sprintf(`
 host: %s
 uptime: %s
 `, host, uptime)
-	case m.Content == ".list":
+	case ".list":
 		var servers []string
 		for _, server := range c.serverConfig.Servers {
 			servers = append(servers, fmt.Sprintf("%s:%s", server.host, server.port))
 		}
 		msg = strings.Join(servers, "\n")
-	case strings.HasPrefix(m.Content, ".info "):
+	case ".info":
 		c.discord.ChannelTyping(m.ChannelID)
-		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".info"))
+		val := args
 		if val == "" {
 			msg = "usage: .info <server>"
 			break
@@ -171,16 +178,16 @@ uptime: %s
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
 		}
-		ping := &Ping{}
-		pong, err := ping.Check(s.host, s.port, s.Timeout)
+		_ = c.sendMessagef("%s", s.Name)
+		pong, err := c.checkServer(s)
 		if err != nil {
 			msg = fmt.Sprintf("error checking %s:\n%s", s.Name, err)
 			break
 		}
-		msg = fmt.Sprintf("%s\n%s", s.Name, pong.Pretty())
-	case strings.HasPrefix(m.Content, ".start "):
+		msg = pong.Pretty()
+	case ".start":
 		c.discord.ChannelTyping(m.ChannelID)
-		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".start"))
+		val := args
 		if val == "" {
 			msg = "usage: .start <server>"
 			break
@@ -200,9 +207,9 @@ uptime: %s
 			msg = fmt.Sprintf("error starting %s:\n%s", s.Name, err)
 			break
 		}
-	case strings.HasPrefix(m.Content, ".stop "):
+	case ".stop":
 		c.discord.ChannelTyping(m.ChannelID)
-		val := strings.TrimSpace(strings.TrimPrefix(m.Content, ".stop"))
+		val := args
 		if val == "" {
 			msg = "usage: .stop <server>"
 			break
@@ -237,7 +244,7 @@ func (c *Discord) sendMessagef(format string, a ...any) error {
 	if msg == "" {
 		msg = "ok"
 	}
-	msg = fmt.Sprintf("```%s```", msg)
+	msg = fmt.Sprintf("```\n%s\n```", msg)
 	if len(msg) > 1000 {
 		r := strings.NewReader(strings.TrimSpace(msg))
 		_, err := c.discord.ChannelFileSend(c.ManagementChannel, "output.txt", r)
