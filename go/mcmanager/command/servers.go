@@ -25,13 +25,13 @@ type server struct {
 	online     bool
 }
 
-func (c *Discord) findServerFuzzy(host string) *server {
+func (c *Discord) findServerFuzzy(host string) (*server, error) {
 	for _, server := range c.serverConfig.Servers {
 		if strings.Contains(server.Host, host) {
-			return server
+			return server, nil
 		}
 	}
-	return &server{Host: host}
+	return nil, fmt.Errorf("server not found")
 }
 
 func (cfg *serverConfig) setDefaults() error {

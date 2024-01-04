@@ -129,7 +129,6 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 
 	var msg string
-	var err error
 	switch {
 	case m.Content == ".help":
 		msg = `
@@ -163,7 +162,11 @@ uptime: %s
 			msg = "usage: .info <server>"
 			break
 		}
-		s := c.findServerFuzzy(val)
+		s, err := c.findServerFuzzy(val)
+		if err != nil {
+			msg = fmt.Sprintf("no such server: %s", val)
+			break
+		}
 		if err := s.setDefaults(); err != nil {
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
@@ -182,7 +185,11 @@ uptime: %s
 			msg = "usage: .start <server>"
 			break
 		}
-		s := c.findServerFuzzy(val)
+		s, err := c.findServerFuzzy(val)
+		if err != nil {
+			msg = fmt.Sprintf("no such server: %s", val)
+			break
+		}
 		if err := s.setDefaults(); err != nil {
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
@@ -200,7 +207,11 @@ uptime: %s
 			msg = "usage: .stop <server>"
 			break
 		}
-		s := c.findServerFuzzy(val)
+		s, err := c.findServerFuzzy(val)
+		if err != nil {
+			msg = fmt.Sprintf("no such server: %s", val)
+			break
+		}
 		if err := s.setDefaults(); err != nil {
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
