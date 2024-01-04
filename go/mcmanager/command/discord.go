@@ -135,6 +135,7 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		msg = `
 .help - show this help message
 .ping - pong
+.uptime - show uptime of this bot
 .list - list servers
 .info <server> - show server info
 .start <server> - start a server
@@ -142,6 +143,8 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 `
 	case m.Content == ".ping":
 		s.ChannelMessageSend(m.ChannelID, "pong")
+	case m.Content == ".uptime":
+		msg = fmt.Sprintf("uptime: %s", time.Since(c.startTime))
 	case m.Content == ".list":
 		var servers []string
 		for _, server := range c.serverConfig.Servers {
