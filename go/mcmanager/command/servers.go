@@ -124,18 +124,20 @@ func (c *Discord) startServer(s *server) (string, error) {
 		return "", fmt.Errorf("polling until start complete: %s", err)
 	}
 
-	attempts := 0
-	for {
-		if _, err := c.checkServer(s); err == nil {
-			break
+	/*
+		attempts := 0
+		for {
+			if _, err := c.checkServer(s); err == nil {
+				break
+			}
+			if attempts >= 5 {
+				return "", fmt.Errorf("waiting for minecraft to start: %s", err)
+			}
+			// shouldn't take longer than this for the mc process to start
+			time.Sleep(30 * time.Second)
+			attempts++
 		}
-		if attempts >= 5 {
-			return "", fmt.Errorf("waiting for minecraft to start: %s", err)
-		}
-		// shouldn't take longer than this for the mc process to start
-		time.Sleep(30 * time.Second)
-		attempts++
-	}
+	*/
 
 	return fmt.Sprintf("%s started", s.Host), nil
 }
