@@ -9,10 +9,15 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        dir:
+          - chatbot
+          - mcmanager
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/images-for-go-apps
       with:
-        dir: chatbot
+        dir: ${{ matrix.dir }}
         token: ${{ secrets.GITHUB_TOKEN }}
