@@ -8,9 +8,9 @@ import (
 )
 
 type serverConfig struct {
+	CheckTimeout          time.Duration `yaml:"check_timeout"`
 	CheckInterval         time.Duration `yaml:"check_interval"`
 	DeallocationThreshold int           `yaml:"deallocation_threshold"`
-	Timeout               time.Duration `yaml:"timeout"`
 	Servers               []*server     `yaml:"servers"`
 }
 
@@ -18,7 +18,7 @@ type server struct {
 	Host          string        `yaml:"host"`
 	Name          string        `yaml:"name"`
 	ResourceGroup string        `yaml:"resource_group"`
-	Timeout       time.Duration `yaml:"timeout"`
+	CheckTimeout  time.Duration `yaml:"check_timeout"`
 
 	host       string
 	port       string
@@ -51,8 +51,8 @@ func (c *Discord) setConfigDefaults() error {
 	if cfg.DeallocationThreshold == 0 {
 		cfg.DeallocationThreshold = 5
 	}
-	if cfg.Timeout == 0 {
-		cfg.Timeout = 5 * time.Second
+	if cfg.CheckTimeout == 0 {
+		cfg.CheckTimeout = 5 * time.Second
 	}
 	for _, s := range cfg.Servers {
 		if err := c.setServerDefaults(s); err != nil {
@@ -80,15 +80,15 @@ func (c *Discord) setServerDefaults(s *server) error {
 	if s.ResourceGroup == "" {
 		s.ResourceGroup = fmt.Sprintf("%s-rg", s.Name)
 	}
-	if s.Timeout == 0 {
-		s.Timeout = c.serverConfig.Timeout
+	if s.CheckTimeout == 0 {
+		s.CheckTimeout = c.serverConfig.CheckTimeout
 	}
 	return nil
 }
 
 func (c *Discord) checkServer(s *server) (*Pong, error) {
 	ping := &Ping{}
-	pong, err := ping.Check(s.host, s.port, s.Timeout)
+	pong, err := ping.Check(s.host, s.port, s.CheckTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (c *Discord) startServer(s *server) (string, error) {
 	}()
 
 	ping := &Ping{}
-	pong, err := ping.Check(s.host, s.port, s.Timeout)
+	pong, err := ping.Check(s.host, s.port, s.CheckTimeout)
 	if err == nil {
 		return fmt.Sprintf("%s is already running with %d players", s.Host, pong.PlayerCount), nil
 	}
@@ -162,7 +162,7 @@ func (c *Discord) deallocateServer(s *server) (string, error) {
 	}()
 
 	ping := &Ping{}
-	pong, err := ping.Check(s.host, s.port, s.Timeout)
+	pong, err := ping.Check(s.host, s.port, s.CheckTimeout)
 	if err == nil && pong.PlayerCount > 0 {
 		return fmt.Sprintf("%s has %d players; that would be rude", s.Host, pong.PlayerCount), nil
 	}
