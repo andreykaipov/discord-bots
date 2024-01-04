@@ -144,7 +144,12 @@ func (c *Discord) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	case m.Content == ".ping":
 		s.ChannelMessageSend(m.ChannelID, "pong")
 	case m.Content == ".uptime":
-		msg = fmt.Sprintf("uptime: %s", time.Since(c.startTime))
+		host, _ := os.Hostname()
+		uptime := time.Since(c.startTime)
+		msg = fmt.Sprintf(`
+host: %s
+uptime: %s
+`, host, uptime)
 	case m.Content == ".list":
 		var servers []string
 		for _, server := range c.serverConfig.Servers {
