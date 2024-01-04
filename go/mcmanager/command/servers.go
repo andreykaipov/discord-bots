@@ -26,12 +26,20 @@ type server struct {
 }
 
 func (c *Discord) findServerFuzzy(host string) (*server, error) {
+	servers := []*server{}
 	for _, server := range c.serverConfig.Servers {
 		if strings.Contains(server.Host, host) {
-			return server, nil
+			servers = append(servers, server)
 		}
 	}
-	return nil, fmt.Errorf("server not found")
+	switch len(servers) {
+	case 0:
+		return nil, fmt.Errorf("server not found")
+	case 1:
+		return servers[0], nil
+	default:
+		return nil, fmt.Errorf("multiple servers found for %q, please be more specific", host)
+	}
 }
 
 func (cfg *serverConfig) setDefaults() error {

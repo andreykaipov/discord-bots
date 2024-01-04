@@ -164,7 +164,7 @@ uptime: %s
 		}
 		s, err := c.findServerFuzzy(val)
 		if err != nil {
-			msg = fmt.Sprintf("no such server: %s", val)
+			msg = fmt.Sprintf("error finding server:\n%s", err)
 			break
 		}
 		if err := s.setDefaults(); err != nil {
@@ -187,7 +187,7 @@ uptime: %s
 		}
 		s, err := c.findServerFuzzy(val)
 		if err != nil {
-			msg = fmt.Sprintf("no such server: %s", val)
+			msg = fmt.Sprintf("error finding server:\n%s", err)
 			break
 		}
 		if err := s.setDefaults(); err != nil {
@@ -209,7 +209,7 @@ uptime: %s
 		}
 		s, err := c.findServerFuzzy(val)
 		if err != nil {
-			msg = fmt.Sprintf("no such server: %s", val)
+			msg = fmt.Sprintf("error finding server:\n%s", err)
 			break
 		}
 		if err := s.setDefaults(); err != nil {
