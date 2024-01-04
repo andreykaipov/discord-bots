@@ -148,6 +148,12 @@ func (c *Discord) deallocateServer(s *server) (string, error) {
 		s.checkCount = 0
 	}()
 
+	ping := &Ping{}
+	pong, err := ping.Check(s.host, s.port, s.Timeout)
+	if err == nil && pong.PlayerCount > 0 {
+		return fmt.Sprintf("%s has %d players; that would be rude", s.Host, pong.PlayerCount), nil
+	}
+
 	// check if vm is already stopped
 	resp, err := c.vmClient.InstanceView(context.Background(), s.ResourceGroup, s.Name, nil)
 	if err != nil {
