@@ -87,8 +87,8 @@ func (c *Discord) Run() error {
 			c.Kong.Printf("checking server: %s", server.Host)
 			pong, err := c.checkServer(server)
 			if err != nil {
-				// should this count towards the check count?
 				c.Kong.Printf("error checking server: %s: %s", server.Host, err)
+				server.checkErrors++
 				continue
 			}
 
@@ -100,15 +100,27 @@ func (c *Discord) Run() error {
 				// _ = c.sendMessagef(msg)
 			default:
 				server.checkCount = 0
+				server.checkErrors = 0
 			}
 
+			var msg string
+			if server.checkErrors >= cfg.DeallocationThreshold {
+				msg = fmt.Sprintf("%s deallocating because it had %d consecutive errors", server.Host, cfg.DeallocationThreshold)
+				server.online = false
+			}
 			if server.checkCount >= cfg.DeallocationThreshold {
 				total := time.Duration(cfg.DeallocationThreshold) * cfg.CheckInterval
-				msg := fmt.Sprintf("%s deallocating because it had no players for %s", server.Host, total)
+				msg = fmt.Sprintf("%s deallocating because it had no players for %s", server.Host, total)
+				server.online = false
+			}
+
+			// we've mark errored servers or servers with no online
+			// players as offline before deallocation so we don't
+			// try to check them again
+			if !server.online {
 				c.Kong.Printf(msg)
 				_ = c.sendMessagef(msg)
 				go c.deallocateServer(server)
-				server.online = false // mark it offline earlier so we don't try to check it again
 			}
 
 			// c.Kong.Printf(pong.Pretty())

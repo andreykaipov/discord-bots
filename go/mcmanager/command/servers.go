@@ -20,10 +20,11 @@ type server struct {
 	ResourceGroup string        `yaml:"resource_group"`
 	CheckTimeout  time.Duration `yaml:"check_timeout"`
 
-	host       string
-	port       string
-	checkCount int
-	online     bool
+	host        string
+	port        string
+	checkCount  int
+	checkErrors int
+	online      bool
 }
 
 func (c *Discord) findServerFuzzy(host string) (*server, error) {
@@ -104,6 +105,7 @@ func (c *Discord) startServer(s *server) (string, error) {
 	defer func() {
 		s.online = true
 		s.checkCount = 0
+		s.checkErrors = 0
 	}()
 
 	ping := &Ping{}
@@ -159,6 +161,7 @@ func (c *Discord) deallocateServer(s *server) (string, error) {
 	defer func() {
 		s.online = false
 		s.checkCount = 0
+		s.checkErrors = 0
 	}()
 
 	ping := &Ping{}
