@@ -10,6 +10,7 @@ import (
 type serverConfig struct {
 	CheckInterval         time.Duration `yaml:"check_interval"`
 	DeallocationThreshold int           `yaml:"deallocation_threshold"`
+	Timeout               time.Duration `yaml:"timeout"`
 	Servers               []*server     `yaml:"servers"`
 }
 
@@ -42,22 +43,26 @@ func (c *Discord) findServerFuzzy(host string) (*server, error) {
 	}
 }
 
-func (cfg *serverConfig) setDefaults() error {
+func (c *Discord) setConfigDefaults() error {
+	cfg := c.serverConfig
 	if cfg.CheckInterval == 0 {
 		cfg.CheckInterval = 5 * time.Minute
 	}
 	if cfg.DeallocationThreshold == 0 {
 		cfg.DeallocationThreshold = 5
 	}
+	if cfg.Timeout == 0 {
+		cfg.Timeout = 5 * time.Second
+	}
 	for _, s := range cfg.Servers {
-		if err := s.setDefaults(); err != nil {
+		if err := c.setServerDefaults(s); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *server) setDefaults() error {
+func (c *Discord) setServerDefaults(s *server) error {
 	parts := strings.Split(s.Host, ":")
 	switch len(parts) {
 	case 1:
@@ -76,7 +81,7 @@ func (s *server) setDefaults() error {
 		s.ResourceGroup = fmt.Sprintf("%s-rg", s.Name)
 	}
 	if s.Timeout == 0 {
-		s.Timeout = 5 * time.Second
+		s.Timeout = c.serverConfig.Timeout
 	}
 	return nil
 }

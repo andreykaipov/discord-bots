@@ -73,7 +73,7 @@ func (c *Discord) Run() error {
 	if err := yaml.Unmarshal(rawServers, &c.serverConfig); err != nil {
 		return err
 	}
-	if err := c.serverConfig.setDefaults(); err != nil {
+	if err := c.setConfigDefaults(); err != nil {
 		return err
 	}
 
@@ -174,7 +174,7 @@ uptime: %s
 			msg = fmt.Sprintf("error finding server:\n%s", err)
 			break
 		}
-		if err := s.setDefaults(); err != nil {
+		if err := c.setServerDefaults(s); err != nil {
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
 		}
@@ -197,7 +197,7 @@ uptime: %s
 			msg = fmt.Sprintf("error finding server:\n%s", err)
 			break
 		}
-		if err := s.setDefaults(); err != nil {
+		if err := c.setServerDefaults(s); err != nil {
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
 		}
@@ -219,7 +219,7 @@ uptime: %s
 			msg = fmt.Sprintf("error finding server:\n%s", err)
 			break
 		}
-		if err := s.setDefaults(); err != nil {
+		if err := c.setServerDefaults(s); err != nil {
 			msg = fmt.Sprintf("error setting defaults:\n%s", err)
 			break
 		}
