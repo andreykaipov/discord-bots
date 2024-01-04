@@ -1,0 +1,14 @@
+# any of the top level configs can be set on the host level
+# to overwrite them
+
+---
+check_timeout: 10s
+check_interval: 3m
+deallocation_threshold: 5
+servers:
+  - host: mc1.example.com
+  - host: mc2.example.com
+    check_timeout: 1s
+    check_interval: 30s
+  - host: mc3.example.com
+    check_interval: 5s
