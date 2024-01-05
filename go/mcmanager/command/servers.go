@@ -105,17 +105,6 @@ func (c *Discord) checkServer(s *server) (*Pong, error) {
 }
 
 func (c *Discord) startServer(s *server) (string, error) {
-	// this might be an issue if multiple start requests are issued. in this
-	// case, start server will return early (e.g. because the server is
-	// already starting), at which point this defer func will be called much
-	// earlier, marking the server online before it actually is. however,
-	// it's not big of a deal...
-	defer func() {
-		s.online = true
-		s.checkCount = 0
-		s.checkErrors = 0
-	}()
-
 	ping := &Ping{}
 	pong, err := ping.Check(s.host, s.port, s.CheckTimeout)
 	if err == nil {
@@ -132,12 +121,16 @@ func (c *Discord) startServer(s *server) (string, error) {
 		case "ProvisioningState/updating":
 			return fmt.Sprintf("%s is currently updating, wait for it to finish whatever it's doing", s.Host), nil
 		case "PowerState/starting":
+			s.setStatus("online")
 			return fmt.Sprintf("%s is already starting, please wait you impatient animal", s.Host), nil
 		case "PowerState/running":
+			s.setStatus("online")
 			return fmt.Sprintf("%s is running, but Minecraft isn't up yet", s.Host), nil
 		default:
 		}
 	}
+
+	s.setStatus("online")
 	poller, err := c.vmClient.BeginStart(context.Background(), s.ResourceGroup, s.Name, nil)
 	if err != nil {
 		return "", fmt.Errorf("starting server: %s", err)
@@ -147,31 +140,10 @@ func (c *Discord) startServer(s *server) (string, error) {
 		return "", fmt.Errorf("polling until start complete: %s", err)
 	}
 
-	/*
-		attempts := 0
-		for {
-			if _, err := c.checkServer(s); err == nil {
-				break
-			}
-			if attempts >= 5 {
-				return "", fmt.Errorf("waiting for minecraft to start: %s", err)
-			}
-			// shouldn't take longer than this for the mc process to start
-			time.Sleep(30 * time.Second)
-			attempts++
-		}
-	*/
-
 	return fmt.Sprintf("%s started", s.Host), nil
 }
 
 func (c *Discord) deallocateServer(s *server) (string, error) {
-	defer func() {
-		s.online = false
-		s.checkCount = 0
-		s.checkErrors = 0
-	}()
-
 	ping := &Ping{}
 	pong, err := ping.Check(s.host, s.port, s.CheckTimeout)
 	if err == nil && pong.PlayerCount > 0 {
@@ -188,12 +160,16 @@ func (c *Discord) deallocateServer(s *server) (string, error) {
 		case "ProvisioningState/updating":
 			return fmt.Sprintf("%s is currently updating, wait for it to finish whatever it's doing", s.Host), nil
 		case "PowerState/deallocating":
+			s.setStatus("offline")
 			return fmt.Sprintf("%s is already deallocating", s.Host), nil
 		case "PowerState/deallocated":
+			s.setStatus("offline")
 			return fmt.Sprintf("%s is already deallocated", s.Host), nil
 		default:
 		}
 	}
+
+	s.setStatus("offline")
 	poller, err := c.vmClient.BeginDeallocate(context.Background(), s.ResourceGroup, s.Name, nil)
 	if err != nil {
 		return "", fmt.Errorf("deallocating server: %s", err)
@@ -204,4 +180,17 @@ func (c *Discord) deallocateServer(s *server) (string, error) {
 	}
 
 	return fmt.Sprintf("%s deallocated", s.Host), nil
+}
+
+func (s *server) setStatus(status string) {
+	switch status {
+	case "online":
+		s.online = true
+	case "offline":
+		s.online = false
+	default:
+		panic(fmt.Sprintf("invalid status: %s", status))
+	}
+	s.checkCount = 0
+	s.checkErrors = 0
 }
