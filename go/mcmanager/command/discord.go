@@ -80,9 +80,11 @@ func (c *Discord) Run() error {
 
 	wg := sync.WaitGroup{}
 	for _, s := range c.serverConfig.Servers {
-		// on startup, assume all servers are online
+		s.online = false
+		if _, err := c.checkServer(s); err == nil {
+			s.online = true
+		}
 		wg.Add(1)
-		s.online = true
 		go func(s *server) {
 			defer wg.Done()
 			ticker := time.NewTicker(s.CheckInterval)
@@ -108,18 +110,17 @@ func (c *Discord) deallocateCondionally(s *server) {
 	if err != nil {
 		c.Kong.Printf("error checking server: %s: %s", s.Host, err)
 		s.checkErrors++
-		return
-	}
-
-	switch pong.PlayerCount {
-	case 0:
-		s.checkCount++
-		msg := fmt.Sprintf("%s has no players online (check count: %d)", s.Host, s.checkCount)
-		c.Kong.Printf(msg)
-		// _ = c.sendMessagef(msg)
-	default:
-		s.checkCount = 0
-		s.checkErrors = 0
+	} else {
+		switch pong.PlayerCount {
+		case 0:
+			s.checkCount++
+			msg := fmt.Sprintf("%s has no players online (check count: %d)", s.Host, s.checkCount)
+			c.Kong.Printf(msg)
+			// _ = c.sendMessagef(msg)
+		default:
+			s.checkCount = 0
+			s.checkErrors = 0
+		}
 	}
 
 	var msg string
