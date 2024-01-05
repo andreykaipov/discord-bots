@@ -187,7 +187,11 @@ uptime: %s
 	case ".list":
 		var servers []string
 		for _, server := range c.serverConfig.Servers {
-			servers = append(servers, fmt.Sprintf("%s:%s", server.host, server.port))
+			status := "offline"
+			if server.online {
+				status = "online"
+			}
+			servers = append(servers, fmt.Sprintf("%-10s%s:%s", "["+status+"]", server.host, server.port))
 		}
 		msg = strings.Join(servers, "\n")
 	case ".info":
