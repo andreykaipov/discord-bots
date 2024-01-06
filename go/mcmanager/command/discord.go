@@ -80,10 +80,6 @@ func (c *Discord) Run() error {
 
 	wg := sync.WaitGroup{}
 	for _, s := range c.serverConfig.Servers {
-		s.online = false
-		if _, err := c.checkServer(s); err == nil {
-			s.online = true
-		}
 		wg.Add(1)
 		go func(s *server) {
 			defer wg.Done()
@@ -91,6 +87,24 @@ func (c *Discord) Run() error {
 			defer ticker.Stop()
 			for ; true; <-ticker.C {
 				c.deallocateCondionally(s)
+			}
+		}(s)
+
+		// periodically check if the server is online because it might
+		// have been started outside of the typical .start/.stop
+		// discord commands (e.g. via a Terraform apply, az start, from
+		// the UI). it's mostly a safeguard.
+		wg.Add(1)
+		go func(s *server) {
+			defer wg.Done()
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for ; true; <-ticker.C {
+				c.Kong.Printf("periodic check of server's online status: %s", s.Host)
+				s.online = false
+				if _, err := c.checkServer(s); err == nil {
+					s.online = true
+				}
 			}
 		}(s)
 	}
@@ -111,6 +125,7 @@ func (c *Discord) deallocateCondionally(s *server) {
 		c.Kong.Printf("error checking server: %s: %s", s.Host, err)
 		s.checkErrors++
 	} else {
+		s.online = true
 		switch pong.PlayerCount {
 		case 0:
 			s.checkCount++
